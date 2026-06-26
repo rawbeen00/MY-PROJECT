@@ -61,7 +61,7 @@ export default function Settings() {
             sizeMm={s.signature_height_mm ?? 14}
             onSizeChange={(v) => set("signature_height_mm", v)}
             sizeMin={6}
-            sizeMax={40}
+            sizeMax={100}
           />
           <AssetUploader
             kind="stamp"
@@ -71,7 +71,7 @@ export default function Settings() {
             sizeMm={s.stamp_height_mm ?? 22}
             onSizeChange={(v) => set("stamp_height_mm", v)}
             sizeMin={10}
-            sizeMax={50}
+            sizeMax={100}
           />
         </div>
         <div className="px-6 pb-5 text-xs text-slate-500">
