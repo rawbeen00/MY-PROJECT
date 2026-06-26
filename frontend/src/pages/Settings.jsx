@@ -53,11 +53,30 @@ export default function Settings() {
         <div className="af-section-header">Branding Assets</div>
         <div className="af-card-body grid grid-cols-1 md:grid-cols-3 gap-4">
           <AssetUploader kind="logo" label="Company Logo" value={s.logo_url} onChange={(v) => set("logo_url", v)} />
-          <AssetUploader kind="signature" label="Authorized Signature" value={s.signature_url} onChange={(v) => set("signature_url", v)} />
-          <AssetUploader kind="stamp" label="Company Stamp" value={s.stamp_url} onChange={(v) => set("stamp_url", v)} />
+          <AssetUploader
+            kind="signature"
+            label="Authorized Signature"
+            value={s.signature_url}
+            onChange={(v) => set("signature_url", v)}
+            sizeMm={s.signature_height_mm ?? 14}
+            onSizeChange={(v) => set("signature_height_mm", v)}
+            sizeMin={6}
+            sizeMax={40}
+          />
+          <AssetUploader
+            kind="stamp"
+            label="Company Stamp"
+            value={s.stamp_url}
+            onChange={(v) => set("stamp_url", v)}
+            sizeMm={s.stamp_height_mm ?? 22}
+            onSizeChange={(v) => set("stamp_height_mm", v)}
+            sizeMin={10}
+            sizeMax={50}
+          />
         </div>
         <div className="px-6 pb-5 text-xs text-slate-500">
           Uploaded images appear on the invoice PDF (logo in the header, signature & stamp in the bottom-right corner) and in the app header.
+          Use the sliders to scale the signature and stamp size on the printed PDF — remember to <strong>Save Settings</strong>.
         </div>
       </div>
 

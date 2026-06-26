@@ -170,6 +170,8 @@ class SettingsModel(BaseModel):
     logo_url: str = ""
     signature_url: str = ""
     stamp_url: str = ""
+    signature_height_mm: float = 14
+    stamp_height_mm: float = 22
 
 
 # ---------------------------------------------------------------------------

@@ -53,6 +53,33 @@ def _truncate_to_width(c, text: str, max_w: float, font: str = "Helvetica", size
     return (text[:lo] + ell) if lo > 0 else ell
 
 
+def _wrap_text(c, text: str, max_w: float, font: str = "Helvetica", size: int = 9):
+    """Word-wrap text into a list of lines that each fit within max_w."""
+    if not text:
+        return [""]
+    words = str(text).split()
+    lines, cur = [], ""
+    for w in words:
+        trial = (cur + " " + w).strip()
+        if c.stringWidth(trial, font, size) <= max_w:
+            cur = trial
+        else:
+            if cur:
+                lines.append(cur)
+                cur = ""
+            # hard-break very long single words
+            while c.stringWidth(w, font, size) > max_w and len(w) > 1:
+                k = len(w)
+                while k > 1 and c.stringWidth(w[:k], font, size) > max_w:
+                    k -= 1
+                lines.append(w[:k])
+                w = w[k:]
+            cur = w
+    if cur:
+        lines.append(cur)
+    return lines or [""]
+
+
 def _draw_truncated(c, x: float, y: float, text: str, max_w: float, font: str = "Helvetica", size: int = 9):
     c.drawString(x, y, _truncate_to_width(c, text, max_w, font, size))
 
@@ -252,61 +279,92 @@ def build_invoice_pdf(invoice: dict, settings: dict) -> bytes:
         c.drawCentredString(x + col_widths[i] / 2, table_top - 4.8 * mm, h)
         x += col_widths[i]
 
-    # Rows — pad to at least 12 rows for visual consistency
+    # Rows — pad to at least 12 visual rows for consistency.
     items = invoice.get("items", [])
     min_rows = 12
-    total_rows = max(len(items), min_rows)
-    row_h = 6 * mm
+    base_row_h = 6 * mm
+    line_h = 3.6 * mm
+    desc_w = col_widths[1] - 3 * mm  # padding both sides
+
+    # Pre-compute description wraps for each item to know per-row heights
+    item_lines = []
+    for it in items:
+        lines = _wrap_text(c, it.get("description", ""), desc_w, "Helvetica", 9)
+        item_lines.append(lines)
+
     c.setFont("Helvetica", 9)
     y = table_top - 7 * mm
-    for r in range(total_rows):
+    rendered = 0
+    for r, it in enumerate(items):
+        lines = item_lines[r]
+        row_h = max(base_row_h, len(lines) * line_h + 2 * mm)
         y -= row_h
+        rendered += 1
+        # alternating row shading
         if r % 2 == 0:
             c.setFillColor(colors.HexColor("#FAFAFA"))
             c.rect(L, y, table_width, row_h, stroke=0, fill=1)
-        # cell borders
+        # outer + inner borders
         c.setStrokeColor(colors.black)
         c.setLineWidth(0.4)
         c.rect(L, y, table_width, row_h, stroke=1, fill=0)
-        cx = L
+        cx_b = L
         for w in col_widths[:-1]:
-            cx += w
-            c.line(cx, y, cx, y + row_h)
+            cx_b += w
+            c.line(cx_b, y, cx_b, y + row_h)
+
+        qty = float(it.get("qty", 0) or 0)
+        price = float(it.get("unit_price", 0) or 0)
+        vat_pct = float(it.get("vat_percent", 5) or 0)
+        vat_amt = qty * price * (vat_pct / 100)
+        cells = [
+            str(r + 1),
+            None,  # description handled separately (multi-line)
+            _fmt(qty) if qty else "",
+            str(it.get("unit", "")),
+            _fmt(price) if price else "",
+            _fmt(it.get("total_excl", qty * price)),
+            _fmt(vat_amt),
+            _fmt(it.get("total_incl", qty * price + vat_amt)),
+        ]
         c.setFillColor(colors.black)
-        if r < len(items):
-            it = items[r]
-            qty = float(it.get("qty", 0) or 0)
-            price = float(it.get("unit_price", 0) or 0)
-            vat_pct = float(it.get("vat_percent", 5) or 0)
-            vat_amt = qty * price * (vat_pct / 100)
-            cells = [
-                str(r + 1),
-                str(it.get("description", "")),
-                _fmt(qty) if qty else "",
-                str(it.get("unit", "")),
-                _fmt(price) if price else "",
-                _fmt(it.get("total_excl", qty * price)),
-                _fmt(vat_amt),
-                _fmt(it.get("total_incl", qty * price + vat_amt)),
-            ]
-        else:
-            # Empty row: blank cells (no 0.00 fillers)
-            cells = ["", "", "", "", "", "", "", ""]
         cx = L
         for i, val in enumerate(cells):
-            align = "left" if i == 1 else "center" if i in (0, 2, 3) else "right"
-            pad = 1.5 * mm
-            avail_w = col_widths[i] - 2 * pad
-            # Truncate any cell text that would overflow its cell width
-            shown = _truncate_to_width(c, str(val), avail_w, "Helvetica", 9)
-            tx = cx + pad if align == "left" else cx + col_widths[i] - pad if align == "right" else cx + col_widths[i] / 2
-            if align == "center":
-                c.drawCentredString(tx, y + 1.8 * mm, shown)
-            elif align == "right":
-                c.drawRightString(tx, y + 1.8 * mm, shown)
+            if i == 1:
+                # Multi-line description, top-aligned
+                ldx = cx + 1.5 * mm
+                ldy = y + row_h - 3.2 * mm
+                for ln in lines:
+                    c.drawString(ldx, ldy, ln)
+                    ldy -= line_h
             else:
-                c.drawString(tx, y + 1.8 * mm, shown)
+                align = "center" if i in (0, 2, 3) else "right"
+                pad = 1.5 * mm
+                avail_w = col_widths[i] - 2 * pad
+                shown = _truncate_to_width(c, str(val), avail_w, "Helvetica", 9)
+                tx = cx + col_widths[i] - pad if align == "right" else cx + col_widths[i] / 2
+                # vertically centered for non-description cells
+                vy = y + (row_h - 3 * mm) / 2
+                if align == "center":
+                    c.drawCentredString(tx, vy, shown)
+                else:
+                    c.drawRightString(tx, vy, shown)
             cx += col_widths[i]
+
+    # Padding empty rows to fill the visual minimum
+    pad_rows = max(0, min_rows - rendered)
+    for k in range(pad_rows):
+        y -= base_row_h
+        if (rendered + k) % 2 == 0:
+            c.setFillColor(colors.HexColor("#FAFAFA"))
+            c.rect(L, y, table_width, base_row_h, stroke=0, fill=1)
+        c.setStrokeColor(colors.black)
+        c.setLineWidth(0.4)
+        c.rect(L, y, table_width, base_row_h, stroke=1, fill=0)
+        cx_b = L
+        for w in col_widths[:-1]:
+            cx_b += w
+            c.line(cx_b, y, cx_b, y + base_row_h)
 
     # ---------- TOTALS + WORDS + BANK ----------
     totals_top = y - 4 * mm
@@ -401,14 +459,14 @@ def build_invoice_pdf(invoice: dict, settings: dict) -> bytes:
         if stamp_file:
             si = ImageReader(stamp_file)
             sw, sh = si.getSize()
-            target_h = 22 * mm
+            target_h = float(settings.get("stamp_height_mm", 22) or 22) * mm
             target_w = target_h * (sw / sh)
             c.drawImage(si, R - 58 * mm, sign_y - 2 * mm, width=target_w, height=target_h,
                         mask='auto', preserveAspectRatio=True)
         if sig_file:
             sg = ImageReader(sig_file)
             gw, gh = sg.getSize()
-            target_h = 14 * mm
+            target_h = float(settings.get("signature_height_mm", 14) or 14) * mm
             target_w = target_h * (gw / gh)
             c.drawImage(sg, R - 30 * mm, sign_y - 1 * mm, width=target_w, height=target_h,
                         mask='auto', preserveAspectRatio=True)

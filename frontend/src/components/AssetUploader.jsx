@@ -5,7 +5,7 @@ import api from "@/lib/api";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 
-export default function AssetUploader({ kind, label, value, onChange }) {
+export default function AssetUploader({ kind, label, value, onChange, sizeMm, onSizeChange, sizeMin = 8, sizeMax = 50 }) {
   const fileRef = useRef(null);
   const [busy, setBusy] = useState(false);
 
@@ -48,6 +48,7 @@ export default function AssetUploader({ kind, label, value, onChange }) {
   };
 
   const src = value ? `${BACKEND_URL}${value.split("?")[0]}?t=${Date.now()}` : null;
+  const showSizer = typeof sizeMm === "number" && typeof onSizeChange === "function";
 
   return (
     <div className="af-card p-4" data-testid={`asset-${kind}`}>
@@ -86,7 +87,12 @@ export default function AssetUploader({ kind, label, value, onChange }) {
       />
       <div className="h-32 rounded-lg border-2 border-dashed border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden">
         {src ? (
-          <img src={src} alt={label} className="max-h-full max-w-full object-contain p-2" />
+          <img
+            src={src}
+            alt={label}
+            className="object-contain p-2"
+            style={showSizer ? { height: `${Math.min(100, (sizeMm / sizeMax) * 100)}%`, maxWidth: "100%" } : { maxHeight: "100%", maxWidth: "100%" }}
+          />
         ) : (
           <div className="text-center text-slate-400">
             <ImageIcon size={28} className="mx-auto mb-1 opacity-60" />
@@ -94,7 +100,27 @@ export default function AssetUploader({ kind, label, value, onChange }) {
           </div>
         )}
       </div>
-      <p className="text-[11px] text-slate-400 mt-2">PNG, JPG or WEBP. Recommended transparent background.</p>
+      {showSizer && (
+        <div className="mt-3">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold">PDF Size</span>
+            <span className="text-xs font-bold text-orange-600" data-testid={`${kind}-size-value`}>{sizeMm} mm</span>
+          </div>
+          <input
+            type="range"
+            min={sizeMin}
+            max={sizeMax}
+            step="1"
+            value={sizeMm}
+            onChange={(e) => onSizeChange(parseFloat(e.target.value))}
+            className="w-full accent-orange-500"
+            data-testid={`${kind}-size-slider`}
+          />
+        </div>
+      )}
+      {!showSizer && (
+        <p className="text-[11px] text-slate-400 mt-2">PNG, JPG or WEBP. Recommended transparent background.</p>
+      )}
     </div>
   );
 }
