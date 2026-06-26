@@ -11,8 +11,9 @@ import bcrypt
 import jwt
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Response, Query
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Response, Query, UploadFile, File
 from fastapi.responses import StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field, EmailStr, ConfigDict
@@ -166,6 +167,9 @@ class SettingsModel(BaseModel):
     swift_code: str = "ADCBAEAA"
     default_vat: float = 5
     invoice_prefix: str = "AF-"
+    logo_url: str = ""
+    signature_url: str = ""
+    stamp_url: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -201,7 +205,57 @@ async def me(user: dict = Depends(get_current_user)):
     return user
 
 
+UPLOAD_DIR = ROOT_DIR / "uploads"
+UPLOAD_DIR.mkdir(exist_ok=True)
+ALLOWED_KINDS = {"logo", "signature", "stamp"}
+
+
+@api.post("/settings/upload/{kind}")
+async def upload_asset(kind: str, file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+    if kind not in ALLOWED_KINDS:
+        raise HTTPException(status_code=400, detail="Invalid asset kind")
+    ext = (file.filename.rsplit(".", 1)[-1] if "." in (file.filename or "") else "png").lower()
+    if ext not in {"png", "jpg", "jpeg", "webp"}:
+        raise HTTPException(status_code=400, detail="Only PNG/JPG/WEBP allowed")
+    fname = f"{kind}.{ext}"
+    dest = UPLOAD_DIR / fname
+    # remove any prior file with a different extension
+    for old in UPLOAD_DIR.glob(f"{kind}.*"):
+        if old.name != fname:
+            try: old.unlink()
+            except Exception: pass
+    contents = await file.read()
+    dest.write_bytes(contents)
+    url = f"/api/uploads/{fname}"
+    field = f"{kind}_url"
+    await db.settings.update_one({"_id": "default"}, {"$set": {field: url}}, upsert=True)
+    return {"url": url}
+
+
+@api.delete("/settings/upload/{kind}")
+async def delete_asset(kind: str, user: dict = Depends(get_current_user)):
+    if kind not in ALLOWED_KINDS:
+        raise HTTPException(status_code=400, detail="Invalid asset kind")
+    for old in UPLOAD_DIR.glob(f"{kind}.*"):
+        try: old.unlink()
+        except Exception: pass
+    field = f"{kind}_url"
+    await db.settings.update_one({"_id": "default"}, {"$set": {field: ""}}, upsert=True)
+    return {"ok": True}
+
+
 # ---------- Settings ----------
+@api.get("/settings/public")
+async def public_settings():
+    """Public branding info — used by login page logo display."""
+    doc = await db.settings.find_one({"_id": "default"}, {"_id": 0}) or SettingsModel().model_dump()
+    return {
+        "company_name": doc.get("company_name", ""),
+        "tagline": doc.get("tagline", ""),
+        "logo_url": doc.get("logo_url", ""),
+    }
+
+
 @api.get("/settings")
 async def get_settings(user: dict = Depends(get_current_user)):
     doc = await db.settings.find_one({"_id": "default"}, {"_id": 0})
@@ -509,6 +563,7 @@ async def dashboard_stats(user: dict = Depends(get_current_user)):
 # ---------------------------------------------------------------------------
 # Startup
 # ---------------------------------------------------------------------------
+app.mount("/api/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 app.include_router(api)
 
 app.add_middleware(
@@ -556,6 +611,20 @@ async def startup():
         {"$setOnInsert": SettingsModel().model_dump()},
         upsert=True,
     )
+    # Backfill any missing fields for older docs
+    defaults = SettingsModel().model_dump()
+    existing_settings = await db.settings.find_one({"_id": "default"}) or {}
+    missing = {k: v for k, v in defaults.items() if k not in existing_settings}
+    if missing:
+        await db.settings.update_one({"_id": "default"}, {"$set": missing})
+    # If we have a default logo bundled on disk, point settings to it
+    default_logo = UPLOAD_DIR / "logo.png"
+    if default_logo.exists():
+        await db.settings.update_one(
+            {"_id": "default"},
+            {"$set": {"logo_url": "/api/uploads/logo.png"}},
+            upsert=True,
+        )
 
 
 @app.on_event("shutdown")

@@ -1,8 +1,11 @@
 """PDF generator that closely matches the Ansary Furniture tax invoice template."""
+import os
 from io import BytesIO
+from pathlib import Path
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.lib import colors
+from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
 from reportlab.platypus import Paragraph, Table, TableStyle
 from reportlab.lib.styles import ParagraphStyle
@@ -11,6 +14,18 @@ from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT
 ORANGE = colors.HexColor("#F58220")
 LIGHT_GRAY = colors.HexColor("#E5E5E5")
 DARK = colors.HexColor("#1F2937")
+
+ROOT_DIR = Path(__file__).parent
+UPLOAD_DIR = ROOT_DIR / "uploads"
+
+
+def _asset_path(url: str):
+    """Resolve a /api/uploads/<name> URL to an absolute file path on disk."""
+    if not url:
+        return None
+    name = url.split("/uploads/")[-1] if "/uploads/" in url else url.lstrip("/")
+    p = UPLOAD_DIR / name
+    return str(p) if p.exists() else None
 
 
 def _fmt(n: float) -> str:
@@ -66,7 +81,22 @@ def build_invoice_pdf(invoice: dict, settings: dict) -> bytes:
     top = height - 12 * mm
 
     # ---------- HEADER ----------
-    _draw_logo(c, L, top - 12 * mm, w=40 * mm)
+    logo_file = _asset_path(settings.get("logo_url", ""))
+    if logo_file:
+        try:
+            img = ImageReader(logo_file)
+            iw, ih = img.getSize()
+            target_w = 40 * mm
+            target_h = target_w * (ih / iw)
+            if target_h > 26 * mm:
+                target_h = 26 * mm
+                target_w = target_h * (iw / ih)
+            c.drawImage(img, L, top - target_h, width=target_w, height=target_h,
+                        mask='auto', preserveAspectRatio=True)
+        except Exception:
+            _draw_logo(c, L, top - 12 * mm, w=40 * mm)
+    else:
+        _draw_logo(c, L, top - 12 * mm, w=40 * mm)
 
     # Center "TAX INVOICE" badge
     badge_w = 60 * mm
@@ -296,6 +326,28 @@ def build_invoice_pdf(invoice: dict, settings: dict) -> bytes:
     c.setFillColor(colors.grey)
     c.drawRightString(R, sign_y - 6 * mm, "Authorized Signature & Stamp")
     c.line(R - 60 * mm, sign_y - 2 * mm, R, sign_y - 2 * mm)
+
+    # Place uploaded signature and stamp above the signature line if present
+    sig_file = _asset_path(settings.get("signature_url", ""))
+    stamp_file = _asset_path(settings.get("stamp_url", ""))
+    try:
+        if stamp_file:
+            si = ImageReader(stamp_file)
+            sw, sh = si.getSize()
+            target_h = 22 * mm
+            target_w = target_h * (sw / sh)
+            c.drawImage(si, R - 58 * mm, sign_y - 2 * mm, width=target_w, height=target_h,
+                        mask='auto', preserveAspectRatio=True)
+        if sig_file:
+            sg = ImageReader(sig_file)
+            gw, gh = sg.getSize()
+            target_h = 14 * mm
+            target_w = target_h * (gw / gh)
+            c.drawImage(sg, R - 30 * mm, sign_y - 1 * mm, width=target_w, height=target_h,
+                        mask='auto', preserveAspectRatio=True)
+    except Exception:
+        pass
+
 
     # Footer page number
     c.setFont("Helvetica", 7)
