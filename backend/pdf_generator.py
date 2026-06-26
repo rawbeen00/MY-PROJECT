@@ -35,6 +35,28 @@ def _fmt(n: float) -> str:
         return "0.00"
 
 
+def _truncate_to_width(c, text: str, max_w: float, font: str = "Helvetica", size: int = 9) -> str:
+    """Return text truncated with an ellipsis so it fits inside max_w."""
+    if not text:
+        return ""
+    if c.stringWidth(text, font, size) <= max_w:
+        return text
+    ell = "…"
+    # binary search for fit
+    lo, hi = 0, len(text)
+    while lo < hi:
+        mid = (lo + hi + 1) // 2
+        if c.stringWidth(text[:mid] + ell, font, size) <= max_w:
+            lo = mid
+        else:
+            hi = mid - 1
+    return (text[:lo] + ell) if lo > 0 else ell
+
+
+def _draw_truncated(c, x: float, y: float, text: str, max_w: float, font: str = "Helvetica", size: int = 9):
+    c.drawString(x, y, _truncate_to_width(c, text, max_w, font, size))
+
+
 def _draw_logo(c: canvas.Canvas, x: float, y: float, w: float = 40 * mm) -> None:
     """Draw an SVG-like Ansary Furniture roof logo using primitives."""
     # roof triangle
@@ -128,16 +150,11 @@ def build_invoice_pdf(invoice: dict, settings: dict) -> bytes:
         c.drawRightString(rx, ry - (i + 1) * 4.5 * mm, ws)
 
     # ---------- CUSTOMER + INVOICE DETAILS BLOCK ----------
+    # Align both blocks: same header height, same total body height.
     cust_y_top = by - 20 * mm
-    # Customer Details header bar
-    c.setFillColor(ORANGE)
-    c.rect(L, cust_y_top - 6 * mm, 110 * mm, 6 * mm, stroke=0, fill=1)
-    c.setFillColor(colors.white)
-    c.setFont("Helvetica-Bold", 11)
-    c.drawCentredString(L + 55 * mm, cust_y_top - 4.3 * mm, "Customer Details:")
-
+    header_h = 6 * mm
     cust = invoice.get("customer", {})
-    rows = [
+    cust_rows = [
         ("Customer TRN:", cust.get("customer_trn", "")),
         ("To M/s:", cust.get("contact_person", "")),
         ("Company Name:", cust.get("company_name", "")),
@@ -145,58 +162,84 @@ def build_invoice_pdf(invoice: dict, settings: dict) -> bytes:
         ("Ph. No.:", cust.get("phone", "")),
         ("E-mail:", cust.get("email", "")),
     ]
-    row_h = 6 * mm
-    box_y = cust_y_top - 6 * mm - len(rows) * row_h
-    # Outer box for customer fields
-    c.setStrokeColor(colors.black)
-    c.setLineWidth(0.7)
-    c.rect(L, box_y, 110 * mm, len(rows) * row_h, stroke=1, fill=0)
-    label_w = 32 * mm
-    for i, (k, v) in enumerate(rows):
-        y = cust_y_top - 6 * mm - (i + 1) * row_h
-        # alternating shade
-        if i % 2 == 0:
-            c.setFillColor(colors.HexColor("#F5F5F5"))
-            c.rect(L, y, label_w, row_h, stroke=0, fill=1)
-        c.setStrokeColor(colors.black)
-        c.setLineWidth(0.4)
-        c.line(L + label_w, y, L + label_w, y + row_h)
-        c.line(L, y, L + 110 * mm, y)
-        c.setFillColor(colors.black)
-        c.setFont("Helvetica-Bold", 9)
-        c.drawString(L + 1.5 * mm, y + 1.8 * mm, k)
-        c.setFont("Helvetica", 9)
-        c.drawString(L + label_w + 2 * mm, y + 1.8 * mm, str(v))
-
-    # Right side: Invoice meta
-    meta_x = L + 120 * mm
-    meta_w = R - meta_x
     meta_rows = [
         ("INVOICE NO.:", invoice.get("invoice_no", "")),
         ("DATE:", invoice.get("date", "")),
         ("D.O./NO.:", invoice.get("do_no", "")),
         ("L.P.O. NO.:", invoice.get("lpo_no", "")),
     ]
-    mh = 7 * mm
+    # Body heights are equal across both blocks
+    cust_body_h = 36 * mm
+    cust_row_h = cust_body_h / len(cust_rows)        # 6 mm each
+    meta_row_h = cust_body_h / len(meta_rows)        # 9 mm each
+    body_top = cust_y_top - header_h
+    body_bot = body_top - cust_body_h
+
+    # --- Left: Customer Details ---
+    cust_box_w = 110 * mm
+    # Header bar
+    c.setFillColor(ORANGE)
+    c.rect(L, body_top, cust_box_w, header_h, stroke=0, fill=1)
+    c.setFillColor(colors.white)
+    c.setFont("Helvetica-Bold", 11)
+    c.drawCentredString(L + cust_box_w / 2, body_top + 1.8 * mm, "Customer Details:")
+    # Body outer box
+    c.setStrokeColor(colors.black)
+    c.setLineWidth(0.7)
+    c.rect(L, body_bot, cust_box_w, cust_body_h, stroke=1, fill=0)
+    label_w = 32 * mm
+    for i, (k, v) in enumerate(cust_rows):
+        y = body_top - (i + 1) * cust_row_h
+        # label cell shaded
+        c.setFillColor(colors.HexColor("#F5F5F5"))
+        c.rect(L, y, label_w, cust_row_h, stroke=0, fill=1)
+        # internal lines
+        c.setStrokeColor(colors.black)
+        c.setLineWidth(0.4)
+        c.line(L + label_w, y, L + label_w, y + cust_row_h)
+        if i < len(cust_rows) - 1:
+            c.line(L, y, L + cust_box_w, y)
+        # label + value
+        c.setFillColor(colors.black)
+        c.setFont("Helvetica-Bold", 9)
+        c.drawString(L + 1.5 * mm, y + 1.8 * mm, k)
+        c.setFont("Helvetica", 9)
+        _draw_truncated(c, L + label_w + 2 * mm, y + 1.8 * mm, str(v), cust_box_w - label_w - 4 * mm, "Helvetica", 9)
+
+    # --- Right: Invoice meta (same total height as Customer block) ---
+    meta_x = L + 120 * mm
+    meta_w = R - meta_x
+    # No top header bar — the orange labels themselves act as headers
+    # Outer box for the whole meta block, height = header_h + cust_body_h to align bottoms
+    meta_total_h = header_h + cust_body_h
+    c.setStrokeColor(colors.black)
+    c.setLineWidth(0.7)
+    c.rect(meta_x, body_bot, meta_w, meta_total_h, stroke=1, fill=0)
+    # Distribute the meta rows over the full meta_total_h
+    full_row_h = meta_total_h / len(meta_rows)
     for i, (k, v) in enumerate(meta_rows):
-        y = cust_y_top - (i + 1) * mh
+        y = cust_y_top - (i + 1) * full_row_h
+        # left orange label cell
         c.setFillColor(ORANGE)
-        c.rect(meta_x, y, meta_w * 0.5, mh, stroke=0, fill=1)
+        c.rect(meta_x, y, meta_w * 0.5, full_row_h, stroke=0, fill=1)
         c.setFillColor(colors.white)
         c.setFont("Helvetica-Bold", 9)
-        c.drawString(meta_x + 2 * mm, y + 2.2 * mm, k)
-        c.setFillColor(colors.white)
+        c.drawString(meta_x + 2 * mm, y + full_row_h / 2 - 1.2 * mm, k)
+        # right value cell border
         c.setStrokeColor(colors.black)
-        c.setLineWidth(0.5)
-        c.rect(meta_x + meta_w * 0.5, y, meta_w * 0.5, mh, stroke=1, fill=1)
+        c.setLineWidth(0.4)
+        c.line(meta_x + meta_w * 0.5, y, meta_x + meta_w * 0.5, y + full_row_h)
+        if i < len(meta_rows) - 1:
+            c.line(meta_x, y, meta_x + meta_w, y)
         c.setFillColor(colors.black)
         c.setFont("Helvetica", 9)
-        c.drawString(meta_x + meta_w * 0.5 + 2 * mm, y + 2.2 * mm, str(v))
+        _draw_truncated(c, meta_x + meta_w * 0.5 + 2 * mm, y + full_row_h / 2 - 1.2 * mm,
+                        str(v), meta_w * 0.5 - 4 * mm, "Helvetica", 9)
 
     # ---------- ITEMS TABLE ----------
-    table_top = box_y - 6 * mm
-    headers = ["S.NO.", "DESCRIPTION", "QTY", "UNIT", "Unit Price", "Unit VAT 5%", "Total Exct. VAT", "Total Incl. VAT"]
-    col_widths = [12 * mm, 60 * mm, 12 * mm, 14 * mm, 20 * mm, 20 * mm, 26 * mm, 26 * mm]
+    table_top = body_bot - 6 * mm
+    headers = ["S.NO.", "DESCRIPTION", "QTY", "UNIT", "Unit Price", "Total Exct. VAT", "Unit VAT 5%", "Total Incl. VAT"]
+    col_widths = [12 * mm, 60 * mm, 12 * mm, 14 * mm, 20 * mm, 26 * mm, 20 * mm, 26 * mm]
     table_width = sum(col_widths)
 
     # Headers
@@ -232,28 +275,37 @@ def build_invoice_pdf(invoice: dict, settings: dict) -> bytes:
         c.setFillColor(colors.black)
         if r < len(items):
             it = items[r]
+            qty = float(it.get("qty", 0) or 0)
+            price = float(it.get("unit_price", 0) or 0)
+            vat_pct = float(it.get("vat_percent", 5) or 0)
+            vat_amt = qty * price * (vat_pct / 100)
             cells = [
                 str(r + 1),
                 str(it.get("description", "")),
-                _fmt(it.get("qty", 0)) if it.get("qty") else "",
+                _fmt(qty) if qty else "",
                 str(it.get("unit", "")),
-                _fmt(it.get("unit_price", 0)) if it.get("unit_price") else "",
-                _fmt((it.get("qty", 0) * it.get("unit_price", 0)) * (it.get("vat_percent", 5) / 100)),
-                _fmt(it.get("total_excl", 0)),
-                _fmt(it.get("total_incl", 0)),
+                _fmt(price) if price else "",
+                _fmt(it.get("total_excl", qty * price)),
+                _fmt(vat_amt),
+                _fmt(it.get("total_incl", qty * price + vat_amt)),
             ]
         else:
-            cells = ["", "", "", "", "", "0.00", "0.00", "0.00"]
+            # Empty row: blank cells (no 0.00 fillers)
+            cells = ["", "", "", "", "", "", "", ""]
         cx = L
         for i, val in enumerate(cells):
             align = "left" if i == 1 else "center" if i in (0, 2, 3) else "right"
-            tx = cx + 1.5 * mm if align == "left" else cx + col_widths[i] - 1.5 * mm if align == "right" else cx + col_widths[i] / 2
+            pad = 1.5 * mm
+            avail_w = col_widths[i] - 2 * pad
+            # Truncate any cell text that would overflow its cell width
+            shown = _truncate_to_width(c, str(val), avail_w, "Helvetica", 9)
+            tx = cx + pad if align == "left" else cx + col_widths[i] - pad if align == "right" else cx + col_widths[i] / 2
             if align == "center":
-                c.drawCentredString(tx, y + 1.8 * mm, val)
+                c.drawCentredString(tx, y + 1.8 * mm, shown)
             elif align == "right":
-                c.drawRightString(tx, y + 1.8 * mm, val)
+                c.drawRightString(tx, y + 1.8 * mm, shown)
             else:
-                c.drawString(tx, y + 1.8 * mm, val)
+                c.drawString(tx, y + 1.8 * mm, shown)
             cx += col_widths[i]
 
     # ---------- TOTALS + WORDS + BANK ----------
@@ -262,9 +314,24 @@ def build_invoice_pdf(invoice: dict, settings: dict) -> bytes:
     c.setFont("Helvetica-Bold", 9.5)
     c.setFillColor(colors.black)
     c.drawString(L, totals_top, "Net Total in Words:")
-    c.setFont("Helvetica-Bold", 10)
-    c.setFillColor(colors.black)
-    c.drawString(L, totals_top - 5 * mm, invoice.get("amount_words", "ZERO DIRHAMS ONLY"))
+    # Word-wrap the amount-in-words to fit available width (left of totals box)
+    words_max_w = 95 * mm  # totals box starts at L + 100mm
+    words_text = invoice.get("amount_words", "ZERO DIRHAMS ONLY")
+    c.setFont("Helvetica-Bold", 9.5)
+    parts = words_text.split(" ")
+    lines, cur = [], ""
+    for w in parts:
+        trial = (cur + " " + w).strip()
+        if c.stringWidth(trial, "Helvetica-Bold", 9.5) <= words_max_w:
+            cur = trial
+        else:
+            if cur:
+                lines.append(cur)
+            cur = w
+    if cur:
+        lines.append(cur)
+    for li, line in enumerate(lines[:2]):  # max 2 lines to avoid pushing bank details
+        c.drawString(L, totals_top - 5 * mm - li * 4.5 * mm, line)
 
     # Totals box (right)
     tx = L + 100 * mm
