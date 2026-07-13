@@ -1,7 +1,5 @@
 import { useEffect, useState } from "react";
-import api from "@/lib/api";
-
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+import api, { BACKEND_URL } from "@/lib/api";
 
 export function AnsaryLogo({ size = 56, className = "", showText = true }) {
   const [logoUrl, setLogoUrl] = useState("");
@@ -19,10 +17,14 @@ export function AnsaryLogo({ size = 56, className = "", showText = true }) {
       <div className={`flex items-center gap-2 ${className}`}>
         <div className="bg-white rounded-lg p-2 shadow-sm" style={{ display: "inline-flex" }}>
           <img
-            src={`${BACKEND_URL}${logoUrl}`}
-            alt="Ansary Furniture"
-            style={{ height: size, width: "auto", objectFit: "contain" }}
-          />
+  src={`${BACKEND_URL}${logoUrl}`}
+  alt="Ansary Furniture"
+  style={{
+    height: size,
+    width: "auto",
+    objectFit: "contain",
+  }}
+/>
         </div>
       </div>
     );

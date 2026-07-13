@@ -390,7 +390,13 @@ async def _upsert_customer_from_invoice(c: dict) -> str:
 @api.post("/invoices")
 async def create_invoice(payload: InvoiceIn, user: dict = Depends(get_current_user)):
     data = payload.model_dump()
+
+    print("========== INVOICE PAYLOAD ==========")
+    print(data)
+    print("====================================")
+
     if not data.get("invoice_no"):
+        ...
         data["invoice_no"] = await _next_invoice_no()
     else:
         # ensure counter stays ahead if admin overrides

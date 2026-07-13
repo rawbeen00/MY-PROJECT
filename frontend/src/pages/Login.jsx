@@ -49,7 +49,7 @@ export default function Login() {
             </button>
           </form>
           <div className="mt-6 text-xs text-slate-400 text-center">
-            Default: admin@ansaryfurniture.com / Admin@123
+              Enter your account credentials to continue.
           </div>
         </div>
       </div>

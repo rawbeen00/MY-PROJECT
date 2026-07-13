@@ -147,21 +147,67 @@ export default function InvoiceEditor() {
     }
   };
 
-  const printPdf = async () => {
-    try {
-      if (savedId) {
-        const token = localStorage.getItem("af_token");
-        window.open(`${API_BASE}/invoices/${savedId}/pdf?token=${encodeURIComponent(token || "")}`, "_blank");
-      } else {
-        // Preview without saving
-        const res = await api.post("/invoices/preview-pdf", buildPayload(), { responseType: "blob" });
-        const url = URL.createObjectURL(new Blob([res.data], { type: "application/pdf" }));
-        window.open(url, "_blank");
-      }
-    } catch {
-      toast.error("PDF generation failed");
+const printPdf = async () => {
+  try {
+    console.log("PRINT FUNCTION CALLED");
+
+    if (savedId) {
+      const token = localStorage.getItem("af_token");
+
+      const res = await api.get(
+        `/invoices/${savedId}/pdf?token=${encodeURIComponent(token || "")}`,
+        {
+          responseType: "blob",
+        }
+      );
+
+      const blob = new Blob([res.data], {
+        type: "application/pdf",
+      });
+
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${invoiceNo}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+
+      URL.revokeObjectURL(url);
+
+      toast.success("✅ PDF downloaded successfully");
+    } else {
+      const res = await api.post(
+        "/invoices/preview-pdf",
+        buildPayload(),
+        {
+          responseType: "blob",
+        }
+      );
+
+      const blob = new Blob([res.data], {
+        type: "application/pdf",
+      });
+
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "Preview.pdf";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+
+      URL.revokeObjectURL(url);
+
+      toast.success("✅ Preview downloaded");
     }
-  };
+  } catch (err) {
+    console.error(err);
+    toast.error("PDF generation failed");
+  }
+};
 
   const clearForm = () => {
     setCustomer(emptyCustomer);

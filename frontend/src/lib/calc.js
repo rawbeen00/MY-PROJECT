@@ -53,18 +53,35 @@ export function recalcRow(row) {
   const qty = parseFloat(row.qty) || 0;
   const price = parseFloat(row.unit_price) || 0;
   const vatPct = parseFloat(row.vat_percent) || 0;
+
   const subtotal = qty * price;
   const vat = subtotal * (vatPct / 100);
-  return { ...row, total_excl: subtotal, total_incl: subtotal + vat };
+
+  return {
+    ...row,
+    qty,
+    unit_price: price,
+    vat_percent: vatPct,
+    total_excl: subtotal,
+    total_incl: subtotal + vat,
+  };
 }
 
 export function calcTotals(items, discount = 0) {
-  let gross = 0, vat = 0;
+  let gross = 0;
+  let vat = 0;
+
   items.forEach((it) => {
     const r = recalcRow(it);
     gross += r.total_excl;
     vat += r.total_incl - r.total_excl;
   });
+
   const net = gross + vat - (parseFloat(discount) || 0);
-  return { gross_total: gross, vat_total: vat, net_total: net };
+
+  return {
+    gross_total: gross,
+    vat_total: vat,
+    net_total: net,
+  };
 }
