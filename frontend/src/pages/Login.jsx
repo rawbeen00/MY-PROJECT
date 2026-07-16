@@ -50,6 +50,7 @@ export default function Login() {
           </form>
           <div className="mt-6 text-xs text-slate-400 text-center">
               Enter your account credentials to continue.
+
           </div>
         </div>
       </div>
