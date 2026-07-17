@@ -1,7 +1,7 @@
 import axios from "axios";
 
 export const BACKEND_URL =
-  "https://involve-gnome-conclude-fragrance.trycloudflare.com";
+ "https://ansary-invoice-api.onrender.com";
 
 export const API_BASE = `${BACKEND_URL}/api`;
 
