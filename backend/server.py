@@ -179,7 +179,7 @@ class SettingsModel(BaseModel):
 # ---------------------------------------------------------------------------
 app = FastAPI(title="Ansary Furniture API")
 api = APIRouter(prefix="/api")
-
+ 
 
 # ---------- Auth ----------
 @api.post("/auth/login")
