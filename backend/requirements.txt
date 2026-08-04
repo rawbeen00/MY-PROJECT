@@ -3,6 +3,7 @@ click==8.4.2
 cloudinary==1.45.0
 colorama==0.4.6
 h11==0.16.0
+python-dotenv==1.2.2
 six==1.17.0
 urllib3==2.7.0
 uvicorn==0.52.1
