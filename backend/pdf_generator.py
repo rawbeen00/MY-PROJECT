@@ -480,7 +480,8 @@ def build_invoice_pdf(invoice: dict, settings: dict) -> bytes:
             c.drawImage(sg, R - 30 * mm, sign_y - 1 * mm, width=target_w, height=target_h,
                         mask='auto', preserveAspectRatio=True)
     except Exception as e:
-    print("PDF image error:", repr(e))
+        print("PDF image error:", repr(e))
+        pass
 
 
     # Footer page number
