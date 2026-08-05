@@ -12,23 +12,33 @@ export function AnsaryLogo({ size = 56, className = "", showText = true }) {
     return () => { cancelled = true; };
   }, []);
 
-  if (logoUrl) {
-    return (
-      <div className={`flex items-center gap-2 ${className}`}>
-        <div className="bg-white rounded-lg p-2 shadow-sm" style={{ display: "inline-flex" }}>
-          <img
-  src={`${BACKEND_URL}${logoUrl}`}
-  alt="Ansary Furniture"
-  style={{
-    height: size,
-    width: "auto",
-    objectFit: "contain",
-  }}
-/>
-        </div>
+if (logoUrl) {
+
+  const src = logoUrl
+    ? logoUrl.startsWith("http")
+      ? `${logoUrl.split("?")[0]}?t=${Date.now()}`
+      : `${BACKEND_URL}${logoUrl.split("?")[0]}?t=${Date.now()}`
+    : "";
+
+  return (
+    <div className={`flex items-center gap-2 ${className}`}>
+      <div
+        className="bg-white rounded-lg p-2 shadow-sm"
+        style={{ display: "inline-flex" }}
+      >
+        <img
+          src={src}
+          alt="Ansary Furniture"
+          style={{
+            height: size,
+            width: "auto",
+            objectFit: "contain",
+          }}
+        />
       </div>
-    );
-  }
+    </div>
+  );
+}
 
   // Fallback vector logo
   return (
