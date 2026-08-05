@@ -1,5 +1,5 @@
 """PDF generator that closely matches the Ansary Furniture tax invoice template."""
-import os
+import requests
 from io import BytesIO
 from pathlib import Path
 from reportlab.lib.pagesizes import A4
@@ -20,9 +20,18 @@ UPLOAD_DIR = ROOT_DIR / "uploads"
 
 
 def _asset_path(url: str):
-    """Resolve a /api/uploads/<name> URL to an absolute file path on disk."""
+    """Return either a local file path or a BytesIO stream for Cloudinary URLs."""
     if not url:
         return None
+
+    if url.startswith("http://") or url.startswith("https://"):
+        try:
+            r = requests.get(url, timeout=15)
+            r.raise_for_status()
+            return BytesIO(r.content)
+        except Exception:
+            return None
+
     name = url.split("/uploads/")[-1] if "/uploads/" in url else url.lstrip("/")
     p = UPLOAD_DIR / name
     return str(p) if p.exists() else None
@@ -470,8 +479,8 @@ def build_invoice_pdf(invoice: dict, settings: dict) -> bytes:
             target_w = target_h * (gw / gh)
             c.drawImage(sg, R - 30 * mm, sign_y - 1 * mm, width=target_w, height=target_h,
                         mask='auto', preserveAspectRatio=True)
-    except Exception:
-        pass
+    except Exception as e:
+    print("PDF image error:", repr(e))
 
 
     # Footer page number
