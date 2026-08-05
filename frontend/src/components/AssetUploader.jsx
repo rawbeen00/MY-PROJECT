@@ -89,13 +89,12 @@ export default function AssetUploader({ kind, label, value, onChange, sizeMm, on
         onChange={handleUpload}
         data-testid={`file-${kind}-input`}
       />
-      <div className="h-32 rounded-lg border-2 border-dashed border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden">
+      <div className="h-48 rounded-lg border-2 border-dashed border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden">
         {src ? (
           <img
             src={src}
             alt={label}
-            className="object-contain p-2"
-            style={showSizer ? { height: `${Math.min(100, (sizeMm / sizeMax) * 100)}%`, maxWidth: "100%" } : { maxHeight: "100%", maxWidth: "100%" }}
+            className="object-contain w-full h-full p-2"
           />
         ) : (
           <div className="text-center text-slate-400">
