@@ -47,7 +47,11 @@ export default function AssetUploader({ kind, label, value, onChange, sizeMm, on
     }
   };
 
-  const src = value ? `${BACKEND_URL}${value.split("?")[0]}?t=${Date.now()}` : null;
+  const src = value
+  ? value.startsWith("http")
+    ? `${value.split("?")[0]}?t=${Date.now()}`
+    : `${BACKEND_URL}${value.split("?")[0]}?t=${Date.now()}`
+  : null;
   const showSizer = typeof sizeMm === "number" && typeof onSizeChange === "function";
 
   return (
