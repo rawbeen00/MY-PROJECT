@@ -4,6 +4,8 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
+import cloudinary
+import cloudinary.uploader
 import os
 import uuid
 import logging
@@ -27,6 +29,12 @@ from pdf_generator import build_invoice_pdf
 mongo_url = os.environ["MONGO_URL"]
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ["DB_NAME"]]
+cloudinary.config(
+    cloud_name=os.environ["CLOUDINARY_CLOUD_NAME"],
+    api_key=os.environ["CLOUDINARY_API_KEY"],
+    api_secret=os.environ["CLOUDINARY_API_SECRET"],
+    secure=True,
+)
 
 JWT_SECRET = os.environ["JWT_SECRET"]
 JWT_ALGORITHM = "HS256"
@@ -226,24 +234,52 @@ async def upload_asset(kind: str, file: UploadFile = File(...), user: dict = Dep
         if old.name != fname:
             try: old.unlink()
             except Exception: pass
-    contents = await file.read()
-    dest.write_bytes(contents)
-    url = f"/api/uploads/{fname}"
-    field = f"{kind}_url"
-    await db.settings.update_one({"_id": "default"}, {"$set": {field: url}}, upsert=True)
-    return {"url": url}
+contents = await file.read()
+
+result = cloudinary.uploader.upload(
+    contents,
+    folder="ansary-invoice",
+    public_id=kind,
+    overwrite=True,
+    resource_type="image",
+)
+
+print(result)
+
+url = result["secure_url"]
+
+field = f"{kind}_url"
+
+await db.settings.update_one(
+    {"_id": "default"},
+    {"$set": {field: url}},
+    upsert=True,
+)
+
+return {"url": url}
 
 
 @api.delete("/settings/upload/{kind}")
 async def delete_asset(kind: str, user: dict = Depends(get_current_user)):
     if kind not in ALLOWED_KINDS:
         raise HTTPException(status_code=400, detail="Invalid asset kind")
-    for old in UPLOAD_DIR.glob(f"{kind}.*"):
-        try: old.unlink()
-        except Exception: pass
-    field = f"{kind}_url"
-    await db.settings.update_one({"_id": "default"}, {"$set": {field: ""}}, upsert=True)
-    return {"ok": True}
+    try:
+    cloudinary.uploader.destroy(
+        f"ansary-invoice/{kind}",
+        resource_type="image"
+    )
+except Exception:
+    pass
+
+field = f"{kind}_url"
+
+await db.settings.update_one(
+    {"_id": "default"},
+    {"$set": {field: ""}},
+    upsert=True,
+)
+
+return {"ok": True}
 
 
 # ---------- Settings ----------
