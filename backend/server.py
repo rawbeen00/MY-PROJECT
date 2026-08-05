@@ -224,39 +224,46 @@ ALLOWED_KINDS = {"logo", "signature", "stamp"}
 async def upload_asset(kind: str, file: UploadFile = File(...), user: dict = Depends(get_current_user)):
     if kind not in ALLOWED_KINDS:
         raise HTTPException(status_code=400, detail="Invalid asset kind")
+
     ext = (file.filename.rsplit(".", 1)[-1] if "." in (file.filename or "") else "png").lower()
+
     if ext not in {"png", "jpg", "jpeg", "webp"}:
         raise HTTPException(status_code=400, detail="Only PNG/JPG/WEBP allowed")
+
     fname = f"{kind}.{ext}"
     dest = UPLOAD_DIR / fname
+
     # remove any prior file with a different extension
     for old in UPLOAD_DIR.glob(f"{kind}.*"):
         if old.name != fname:
-            try: old.unlink()
-            except Exception: pass
-contents = await file.read()
+            try:
+                old.unlink()
+            except Exception:
+                pass
 
-result = cloudinary.uploader.upload(
-    contents,
-    folder="ansary-invoice",
-    public_id=kind,
-    overwrite=True,
-    resource_type="image",
-)
+    contents = await file.read()
 
-print(result)
+    result = cloudinary.uploader.upload(
+        contents,
+        folder="ansary-invoice",
+        public_id=kind,
+        overwrite=True,
+        resource_type="image",
+    )
 
-url = result["secure_url"]
+    print(result)
 
-field = f"{kind}_url"
+    url = result["secure_url"]
 
-await db.settings.update_one(
-    {"_id": "default"},
-    {"$set": {field: url}},
-    upsert=True,
-)
+    field = f"{kind}_url"
 
-return {"url": url}
+    await db.settings.update_one(
+        {"_id": "default"},
+        {"$set": {field: url}},
+        upsert=True,
+    )
+
+    return {"url": url}
 
 
 @api.delete("/settings/upload/{kind}")
