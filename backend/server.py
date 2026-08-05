@@ -263,23 +263,24 @@ return {"url": url}
 async def delete_asset(kind: str, user: dict = Depends(get_current_user)):
     if kind not in ALLOWED_KINDS:
         raise HTTPException(status_code=400, detail="Invalid asset kind")
+
     try:
-    cloudinary.uploader.destroy(
-        f"ansary-invoice/{kind}",
-        resource_type="image"
+        cloudinary.uploader.destroy(
+            f"ansary-invoice/{kind}",
+            resource_type="image"
+        )
+    except Exception:
+        pass
+
+    field = f"{kind}_url"
+
+    await db.settings.update_one(
+        {"_id": "default"},
+        {"$set": {field: ""}},
+        upsert=True,
     )
-except Exception:
-    pass
 
-field = f"{kind}_url"
-
-await db.settings.update_one(
-    {"_id": "default"},
-    {"$set": {field: ""}},
-    upsert=True,
-)
-
-return {"ok": True}
+    return {"ok": True}
 
 
 # ---------- Settings ----------
