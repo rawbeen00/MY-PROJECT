@@ -125,10 +125,17 @@ export default function InvoiceEditor() {
   });
 
   const save = async () => {
-    if (!customer.company_name && !customer.customer_trn) {
-      toast.error("Please enter Customer TRN or Company Name");
-      return;
-    }
+if (
+    !customer.customer_trn &&
+    !customer.company_name &&
+    !customer.contact_person &&
+    !customer.phone &&
+    !customer.email &&
+    !customer.address
+) {
+    toast.error("Please enter at least one customer detail.");
+    return;
+}
     setSaving(true);
     try {
       if (savedId) {
@@ -260,7 +267,7 @@ const printPdf = async () => {
           <div className="af-section-header"><User size={16} /> Customer Details</div>
           <div className="af-card-body space-y-4">
             <div className="relative">
-              <label className="af-label">Customer TRN <span className="text-red-500">*</span></label>
+              <label className="af-label">Customer TRN</label>
               <input
                 data-testid="customer-trn-input"
                 className="af-input"
