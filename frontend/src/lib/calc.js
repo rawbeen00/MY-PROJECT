@@ -68,16 +68,37 @@ export function recalcRow(row) {
 }
 
 export function calcTotals(items, discount = 0) {
+  const discountAmount = Math.max(0, parseFloat(discount) || 0);
   let gross = 0;
   let vat = 0;
 
-  items.forEach((it) => {
-    const r = recalcRow(it);
+  const rows = items.map((it) => recalcRow(it));
+  rows.forEach((r) => {
     gross += r.total_excl;
+  });
+
+  if (gross > 0 && discountAmount > 0) {
+    let discountedGross = 0;
+
+    rows.forEach((r) => {
+      const lineDiscount = gross === 0 ? 0 : (r.total_excl / gross) * discountAmount;
+      const adjustedExcl = Math.max(0, r.total_excl - lineDiscount);
+      discountedGross += adjustedExcl;
+      vat += adjustedExcl * ((parseFloat(r.vat_percent) || 0) / 100);
+    });
+
+    return {
+      gross_total: gross,
+      vat_total: vat,
+      net_total: discountedGross + vat,
+    };
+  }
+
+  rows.forEach((r) => {
     vat += r.total_incl - r.total_excl;
   });
 
-  const net = gross + vat - (parseFloat(discount) || 0);
+  const net = gross + vat - discountAmount;
 
   return {
     gross_total: gross,
