@@ -204,15 +204,25 @@ def build_invoice_pdf(invoice: dict, settings: dict) -> bytes:
         ("D.O./NO.:", invoice.get("do_no", "")),
         ("L.P.O. NO.:", invoice.get("lpo_no", "")),
     ]
-    # Body heights are equal across both blocks
-    cust_body_h = 36 * mm
-    cust_row_h = cust_body_h / len(cust_rows)        # 6 mm each
-    meta_row_h = cust_body_h / len(meta_rows)        # 9 mm each
+    cust_box_w = 110 * mm
+    label_w = 32 * mm
+    value_w = cust_box_w - label_w - 4 * mm
+    address = str(cust.get("address", "") or "").strip()
+    address_font_size = 8.5
+    address_lines = _wrap_text(c, address, value_w, "Helvetica", address_font_size)
+    while len(address_lines) > 2 and address_font_size > 7:
+        address_font_size = max(7, address_font_size - 0.5)
+        address_lines = _wrap_text(c, address, value_w, "Helvetica", address_font_size)
+
+    address_line_step = 4 * mm
+    address_row_h = max(12 * mm, (len(address_lines) - 1) * address_line_step + 8 * mm)
+    cust_row_heights = [6 * mm, 6 * mm, 6 * mm, address_row_h, 6 * mm, 6 * mm]
+    cust_body_h = sum(cust_row_heights)
+    meta_row_h = cust_body_h / len(meta_rows)
     body_top = cust_y_top - header_h
     body_bot = body_top - cust_body_h
 
     # --- Left: Customer Details ---
-    cust_box_w = 110 * mm
     # Header bar
     c.setFillColor(ORANGE)
     c.rect(L, body_top, cust_box_w, header_h, stroke=0, fill=1)
@@ -223,24 +233,32 @@ def build_invoice_pdf(invoice: dict, settings: dict) -> bytes:
     c.setStrokeColor(colors.black)
     c.setLineWidth(0.7)
     c.rect(L, body_bot, cust_box_w, cust_body_h, stroke=1, fill=0)
-    label_w = 32 * mm
+    row_bottom = body_top
     for i, (k, v) in enumerate(cust_rows):
-        y = body_top - (i + 1) * cust_row_h
-        # label cell shaded
+        row_h = cust_row_heights[i]
+        row_bottom -= row_h
+        y = row_bottom
         c.setFillColor(colors.HexColor("#F5F5F5"))
-        c.rect(L, y, label_w, cust_row_h, stroke=0, fill=1)
-        # internal lines
+        c.rect(L, y, label_w, row_h, stroke=0, fill=1)
         c.setStrokeColor(colors.black)
         c.setLineWidth(0.4)
-        c.line(L + label_w, y, L + label_w, y + cust_row_h)
+        c.line(L + label_w, y, L + label_w, y + row_h)
         if i < len(cust_rows) - 1:
             c.line(L, y, L + cust_box_w, y)
-        # label + value
         c.setFillColor(colors.black)
         c.setFont("Helvetica-Bold", 9)
-        c.drawString(L + 1.5 * mm, y + 1.8 * mm, k)
-        c.setFont("Helvetica", 9)
-        _draw_truncated(c, L + label_w + 2 * mm, y + 1.8 * mm, str(v), cust_box_w - label_w - 4 * mm, "Helvetica", 9)
+        c.drawString(L + 1.5 * mm, y + row_h / 2 - 1.2 * mm, k)
+        value_x = L + label_w + 2 * mm
+        if i == 3:
+            c.setFont("Helvetica", address_font_size)
+            center_y = y + row_h / 2
+            line_offset = (len(address_lines) - 1) * address_line_step / 2
+            for line_index, line in enumerate(address_lines):
+                line_y = center_y + line_offset - line_index * address_line_step - 1.2 * mm
+                c.drawString(value_x, line_y, line)
+        else:
+            c.setFont("Helvetica", 9)
+            _draw_truncated(c, value_x, y + row_h / 2 - 1.2 * mm, str(v), value_w, "Helvetica", 9)
 
     # --- Right: Invoice meta (same total height as Customer block) ---
     meta_x = L + 120 * mm
